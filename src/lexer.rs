@@ -1,24 +1,16 @@
-// code -> List<Token>
-
-/*
-fn sum x y {
-    x + y
-}
-*/
-
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LexerError {
-    Unreachable,
     InvalidToken,
+    StartedWithIdentifier
 }
 
 impl fmt::Display for LexerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let message = match self {
-            Self::Unreachable => "unreachable code. you shouldn't be reading this.",
-            Self::InvalidToken => "invalid token"
+            Self::InvalidToken => "invalid token",
+            Self::StartedWithIdentifier => "cannot start with an identifier"
         };
 
         write!(f, "{message}")
@@ -41,10 +33,8 @@ fn lex(code: &str) -> Result<Vec<Token>, LexerError> {
             ';' => Some(Token::SemiColon),
             _ => None
         };
-
+    
         if let Some(token) = token {
-            dbg!(token.clone());
-
             if let Some(past_token) = parse_token(word) {
                 tokens.push(past_token);
             }
@@ -55,12 +45,18 @@ fn lex(code: &str) -> Result<Vec<Token>, LexerError> {
             continue;
         }        
 
-        word.push(char);
+        if char != ' ' {
+            word.push(char);
+        }
 
         if char == ' ' || code.len() == index + 1 {
-            let token = parse_token(word.trim().to_string());
+            let token = parse_token(word.clone());
 
             if let Some(token) = token {
+                if let Token::Identifier(_) = token {
+                    if tokens.is_empty() { return Err(LexerError::InvalidToken); }
+                }   
+
                 tokens.push(token);
 
                 word = String::new();
@@ -75,13 +71,13 @@ fn parse_token(word: String) -> Option<Token> {
     match word.as_str() {
         "fn" => Some(Token::Fn),
         "let" => Some(Token::Let),
-        "string" | "int" | "bool" | "char" => Some(Token::Type(word)),
+        "String" | "Int" | "Bool" | "Char" => Some(Token::Type(word)),
         _ => {
             if word.is_empty() {
                 return None;
             }
 
-            if !word.chars().all(|char| char.is_alphabetic()) {
+            if !word.chars().all(|char| char.is_alphanumeric()) {
                 return None;
             }
 
@@ -93,8 +89,8 @@ fn parse_token(word: String) -> Option<Token> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Identifier(String),
-    TypeIndicator,
     Type(String),
+    TypeIndicator,
     RightBrace,
     LeftBrace,
     SemiColon,    
@@ -108,19 +104,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn should_parse_it_properly() {
+    fn it_lex_it_properly() {
         let tokens = vec![
-            ("let", vec![Token::Let]),
-            (
-                "let poggers: bool = true;", 
-                vec![
-                    Token::Let, 
-                    Token::Identifier(String::from("poggers")),
-                    Token::TypeIndicator,
-                    Token::Type(String::from("bool")),
-                    Token::Equal,
-                    Token::Identifier(String::from("true")),
-                    Token::SemiColon,
+            ("let poggers: Int = 15;", vec![
+                Token::Let, 
+                Token::Identifier(String::from("poggers")),
+                Token::TypeIndicator,
+                Token::Type(String::from("Int")),
+                Token::Equal,
+                Token::Identifier(String::from("15")),
+                Token::SemiColon,
+            ]),
+            ("fn fn", vec![
+                Token::Fn,
+                Token::Fn,
             ])
         ];
 
@@ -128,6 +125,18 @@ mod tests {
             let lexed_tokens: Vec<Token> = lex(raw_token).unwrap();
 
             assert_eq!(lexed_tokens, tokens)
+        }
+    }
+
+    #[test]
+    fn it_stops_when_starts_with_identifier() {
+        let invalid_tokens = vec![
+            "poggers omegalul pogchamp kekw",
+            "123pogg"
+        ];
+
+        for token in invalid_tokens {
+            assert_eq!(Err(LexerError::InvalidToken), lex(token));
         }
     }
 }
